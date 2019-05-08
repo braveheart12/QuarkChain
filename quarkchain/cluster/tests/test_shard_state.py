@@ -677,8 +677,6 @@ class TestShardState(unittest.TestCase):
                 to_address=acc2,
                 value=888888,
                 gas_price=1,
-                gas_token_id=0,
-                transfer_token_id=0,
             ),
         )
         self.assertEqual(
@@ -773,8 +771,6 @@ class TestShardState(unittest.TestCase):
                         to_address=acc1,
                         value=888888,
                         gas_price=2,
-                        gas_token_id=0,
-                        transfer_token_id=0,
                     )
                 ]
             ),
@@ -905,8 +901,6 @@ class TestShardState(unittest.TestCase):
                         to_address=acc1,
                         value=888888,
                         gas_price=2,
-                        gas_token_id=0,
-                        transfer_token_id=0,
                     )
                 ]
             ),
@@ -938,8 +932,6 @@ class TestShardState(unittest.TestCase):
                         to_address=acc1,
                         value=385723,
                         gas_price=3,
-                        gas_token_id=0,
-                        transfer_token_id=0,
                     )
                 ]
             ),
@@ -1444,145 +1436,3 @@ class TestShardState(unittest.TestCase):
         state.add_root_block(r3)
         self.assertEqual(state.root_tip, r3.header)
         self.assertEqual(state.header_tip, m2.header)
-
-    def test_posw_fetch_previous_coinbase_address(self):
-        acc = Address.create_from_identity(
-            Identity.create_random_identity(), full_shard_key=0
-        )
-        env = get_test_env(genesis_account=acc, genesis_minor_quarkash=0)
-        state = create_default_shard_state(env=env, shard_id=0)
-
-        m = state.get_tip().create_block_to_append(address=acc)
-        coinbase_blockcnt = state._get_posw_coinbase_blockcnt(
-            m.header.hash_prev_minor_block
-        )
-        self.assertEqual(len(coinbase_blockcnt), 1)  # Genesis
-        state.finalize_and_add_block(m)
-
-        # Note PoSW window size is 2
-        prev_addr = None
-        for i in range(4):
-            random_acc = Address.create_random_account(full_shard_key=0)
-            m = state.get_tip().create_block_to_append(address=random_acc)
-            coinbase_blockcnt = state._get_posw_coinbase_blockcnt(
-                m.header.hash_prev_minor_block
-            )
-            self.assertEqual(len(coinbase_blockcnt), 2)
-            # Count should all equal 1
-            self.assertEqual(len(set(coinbase_blockcnt.values())), 1)
-            self.assertEqual(list(coinbase_blockcnt.values())[0], 1)
-            if prev_addr:  # Should always contain previous block's coinbase
-                self.assertTrue(prev_addr in coinbase_blockcnt)
-            state.finalize_and_add_block(m)
-            prev_addr = random_acc.recipient
-
-        # Cached should have certain items
-        self.assertEqual(len(state.coinbase_addr_cache), 5)
-
-    def test_posw_coinbase_lockup(self):
-        id1 = Identity.create_random_identity()
-        acc1 = Address.create_from_identity(id1, full_shard_key=0)
-        id2 = Identity.create_random_identity()
-        acc2 = Address.create_from_identity(id2, full_shard_key=0)
-        env = get_test_env(genesis_account=acc1, genesis_minor_quarkash=0)
-        state = create_default_shard_state(env=env, shard_id=0, posw_override=True)
-
-        # Add a root block to have all the shards initialized, also include the genesis from
-        # another shard to allow x-shard tx TO that shard
-        root_block = state.root_tip.create_block_to_append()
-        root_block.add_minor_block_header(
-            create_default_shard_state(env=env, shard_id=1).header_tip
-        )
-        state.add_root_block(root_block.finalize())
-
-        # Coinbase in genesis should be disallowed
-        self.assertEqual(len(state.evm_state.sender_disallow_list), 1)
-        self.assertTrue(bytes(20) in state.evm_state.sender_disallow_list)
-
-        m = state.get_tip().create_block_to_append(address=acc1)
-        state.finalize_and_add_block(m)
-        self.assertEqual(len(state.evm_state.sender_disallow_list), 2)
-        self.assertGreater(state.get_balance(acc1.recipient), 0)
-
-        # Try to send money from that account
-        for i, is_xshard in enumerate([False, True]):
-            full_shard_key = 1 if is_xshard else 0
-            tx = create_transfer_transaction(
-                shard_state=state,
-                key=id1.get_key(),
-                from_address=acc1,
-                to_address=Address.create_empty_account(full_shard_key),
-                value=1,
-                gas=30000 if is_xshard else 21000,
-            )
-            res = state.execute_tx(tx, acc1)
-            self.assertIsNone(res, "tx should fail")
-
-            # Create a block including that tx, receipt should also report error
-            self.assertTrue(state.add_tx(tx))
-            m = state.create_block_to_mine(address=acc2)
-            state.finalize_and_add_block(m)
-            r = state.get_transaction_receipt(tx.get_hash())
-            self.assertEqual(r[2].success, b"")  # Failure
-
-            if i == 0:
-                # Make sure the disallow rolling window now discards the first addr
-                self.assertEqual(len(state.evm_state.sender_disallow_list), 2)
-                self.assertTrue(bytes(20) not in state.evm_state.sender_disallow_list)
-            else:
-                # Disallow list should only have acc2
-                self.assertEqual(len(state.evm_state.sender_disallow_list), 1)
-                self.assertTrue(acc2.recipient in state.evm_state.sender_disallow_list)
-
-    def test_posw_validate_minor_block_seal(self):
-        acc = Address(b"\x01" * 20, full_shard_key=0)
-        env = get_test_env(genesis_account=acc, genesis_minor_quarkash=256)
-        state = create_default_shard_state(env=env, shard_id=0, posw_override=True)
-        # Force PoSW
-        state.shard_config.CONSENSUS_TYPE = ConsensusType.POW_DOUBLESHA256
-        state.shard_config.POSW_CONFIG.TOTAL_STAKE_PER_BLOCK = 256
-        state.shard_config.POSW_CONFIG.DIFF_DIVIDER = 1000
-
-        self.assertEqual(state.get_token_balance(acc.recipient, DEFAULT_TOKEN), 256)
-        genesis = Address(bytes(20), 0)
-        self.assertEqual(state.get_token_balance(genesis.recipient, DEFAULT_TOKEN), 0)
-
-        # Genesis already has 1 block but zero stake, so no change to block diff
-        m = state.get_tip().create_block_to_append(address=genesis, difficulty=1000)
-        with self.assertRaises(ValueError):
-            state.finalize_and_add_block(m)
-
-        # Total stakes in test env for PoSW is 256, so acc should pass the check
-        # no matter how many blocks he mined before
-        for _ in range(4):
-            for nonce in range(4):  # Try different nonce
-                m = state.get_tip().create_block_to_append(
-                    address=acc, difficulty=1000, nonce=nonce
-                )
-                state.validate_minor_block_seal(m)
-            state.finalize_and_add_block(m)
-
-    def test_posw_window_edge_cases(self):
-        acc = Address(b"\x01" * 20, full_shard_key=0)
-        env = get_test_env(genesis_account=acc, genesis_minor_quarkash=128)
-        state = create_default_shard_state(
-            env=env, shard_id=0, posw_override=True, no_coinbase=True
-        )
-        # Force PoSW, note the window size is 2
-        state.shard_config.CONSENSUS_TYPE = ConsensusType.POW_DOUBLESHA256
-        state.shard_config.POSW_CONFIG.TOTAL_STAKE_PER_BLOCK = 256
-        state.shard_config.POSW_CONFIG.DIFF_DIVIDER = 1000
-
-        # Use 0 to denote blocks mined by others, 1 for blocks mined by acc,
-        # stake * state per block = 1 for acc, 0 <- [curr], so current block
-        # should enjoy the diff adjustment
-        m = state.get_tip().create_block_to_append(address=acc, difficulty=1000)
-        state.finalize_and_add_block(m)
-
-        # Make sure stakes didn't change
-        self.assertEqual(state.get_token_balance(acc.recipient, DEFAULT_TOKEN), 128)
-        # 0 <- 1 <- [curr], the window already has one block with PoSW benefit,
-        # mining new blocks should fail
-        m = state.get_tip().create_block_to_append(address=acc, difficulty=1000)
-        with self.assertRaises(ValueError):
-            state.finalize_and_add_block(m)
