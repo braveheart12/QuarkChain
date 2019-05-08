@@ -33,7 +33,6 @@ BLANK_ROOT = utils.sha3rlp(b"")
 
 THREE = b"\x00" * 19 + b"\x03"
 
-DEFAULT_TOKEN = 0
 TOKEN_TRIE_THRESHOLD = 16
 
 
@@ -69,6 +68,7 @@ STATE_DEFAULTS = {
 class _Account(rlp.Serializable):
     fields = [
         ("nonce", big_endian_int),
+        ("balance", big_endian_int),
         ("token_balances", binary),
         ("storage", trie_root),
         ("code_hash", hash32),
@@ -82,7 +82,7 @@ class TokenBalancePair(rlp.Serializable):
 
 class TokenBalances:
     """interface for token balances
-    TODODLL: store token balances in trie when TOKEN_TRIE_THRESHOLD is crossed
+    TODO: store token balances in trie when TOKEN_TRIE_THRESHOLD is crossed
     """
 
     def __init__(self, data: bytes, db):
@@ -100,8 +100,6 @@ class TokenBalances:
                 raise Exception("Unknown enum byte in token_balances")
 
     def serialize(self):
-        if len(self.balances) == 0:
-            return b""
         retv = self.enum
         if self.enum == b"\x00":
             l = []
@@ -117,16 +115,17 @@ class TokenBalances:
         return retv
 
     def balance(self, token_id):
-        return self.balances.get(token_id, 0)
+        self.balances.get(token_id, 0)
 
-    def is_empty(self):
-        return all(v == 0 for v in self.balances.values())
+    def delta(self, token_id, value):
+        self.balances[token_id] = self.balances.get(token_id, 0) + value
 
 
 class Account:
     def __init__(
         self,
         nonce,
+        balance,
         token_balances,
         storage,
         code_hash,
@@ -140,8 +139,11 @@ class Account:
         self.env = env
         self.address = address
 
-        acc = _Account(nonce, token_balances, storage, code_hash, full_shard_key)
+        acc = _Account(
+            nonce, balance, token_balances, storage, code_hash, full_shard_key
+        )
         self.nonce = acc.nonce
+        self.balance = acc.balance
         self.storage = acc.storage
         self.code_hash = acc.code_hash
         self.full_shard_key = acc.full_shard_key
@@ -194,6 +196,7 @@ class Account:
         db.put(BLANK_HASH, b"")
         o = cls(
             initial_nonce,
+            0,
             b"",
             trie.BLANK_ROOT,
             BLANK_HASH,
@@ -206,11 +209,7 @@ class Account:
         return o
 
     def is_blank(self):
-        return (
-            self.nonce == 0
-            and self.token_balances.is_empty()
-            and self.code_hash == BLANK_HASH
-        )
+        return self.nonce == 0 and self.balance == 0 and self.code_hash == BLANK_HASH
 
     @property
     def exists(self):
@@ -223,7 +222,7 @@ class Account:
         for k, v in self.storage_cache.items():
             odict[utils.encode_int(k)] = rlp.encode(utils.encode_int(v))
         return {
-            "token_balances": str(self.token_balances.balances),
+            "balance": str(self.balance),
             "nonce": str(self.nonce),
             "code": "0x" + encode_hex(self.code),
             "storage": {
@@ -298,6 +297,7 @@ class State:
             o = rlp.decode(rlpdata, _Account)
             o = Account(
                 nonce=o.nonce,
+                balance=o.balance,
                 token_balances=o.token_balances,
                 storage=o.storage,
                 code_hash=o.code_hash,
@@ -319,15 +319,8 @@ class State:
         o._cached_rlp = None
         return o
 
-    def get_balances(self, address) -> dict:
-        return self.get_and_cache_account(
-            utils.normalize_address(address)
-        ).token_balances.balances
-
-    def get_token_balance(self, address, token_id):
-        return self.get_and_cache_account(
-            utils.normalize_address(address)
-        ).token_balances.balance(token_id)
+    def get_balance(self, address):
+        return self.get_and_cache_account(utils.normalize_address(address)).balance
 
     def get_code(self, address):
         return self.get_and_cache_account(utils.normalize_address(address)).code
@@ -346,12 +339,9 @@ class State:
         self.journal.append(lambda: setattr(acct, param, preval))
         setattr(acct, param, val)
 
-    def set_balances(self, address, token_balances: dict):
+    def set_balance(self, address, value):
         acct = self.get_and_cache_account(utils.normalize_address(address))
-        if self.get_balances(address) == token_balances:
-            self.set_and_journal(acct, "touched", True)
-            return
-        self.set_and_journal(acct.token_balances, "balances", token_balances)
+        self.set_and_journal(acct, "balance", value)
         self.set_and_journal(acct, "touched", True)
 
     def set_code(self, address, value):
@@ -365,26 +355,11 @@ class State:
         self.set_and_journal(acct, "nonce", value)
         self.set_and_journal(acct, "touched", True)
 
-    def set_token_balance_and_journal(self, acct, token_id, val):
-        """if token_id was not set, journal will erase token_id when reverted
-        """
-        preval = acct.token_balances.balances.get(token_id, None)
-        if preval == None:
-            self.journal.append(lambda: acct.token_balances.balances.pop(token_id))
-        else:
-            self.journal.append(
-                lambda: acct.token_balances.balances.__setitem__(token_id, preval)
-            )
-        acct.token_balances.balances[token_id] = val
-
-    def delta_token_balance(self, address, token_id, value):
+    def delta_balance(self, address, value):
         address = utils.normalize_address(address)
         acct = self.get_and_cache_account(address)
-        if value == 0:
-            self.set_and_journal(acct, "touched", True)
-            return
-        newbal = acct.token_balances.balance(token_id) + value
-        self.set_token_balance_and_journal(acct, token_id, newbal)
+        newbal = acct.balance + value
+        self.set_and_journal(acct, "balance", newbal)
         self.set_and_journal(acct, "touched", True)
 
     def increment_nonce(self, address):
@@ -451,7 +426,7 @@ class State:
         if (
             three_touched and 2675000 < self.block_number < 2675200
         ):  # Compatibility with weird geth+parity bug
-            self.delta_token_balance(THREE, DEFAULT_TOKEN, 0)
+            self.delta_balance(THREE, 0)
 
     def set_param(self, k, v):
         preval = getattr(self, k)
@@ -515,18 +490,18 @@ class State:
                 return a.existent_at_start
         return o
 
-    def transfer_value(self, from_addr, to_addr, token_id, value):
+    def transfer_value(self, from_addr, to_addr, value):
         assert value >= 0
-        if self.get_token_balance(from_addr, token_id) >= value:
-            self.delta_token_balance(from_addr, token_id, -value)
-            self.delta_token_balance(to_addr, token_id, value)
+        if self.get_balance(from_addr) >= value:
+            self.delta_balance(from_addr, -value)
+            self.delta_balance(to_addr, value)
             return True
         return False
 
-    def deduct_value(self, from_addr, token_id, value):
+    def deduct_value(self, from_addr, value):
         assert value >= 0
-        if self.get_token_balance(from_addr, token_id) >= value:
-            self.delta_token_balance(from_addr, token_id, -value)
+        if self.get_balance(from_addr) >= value:
+            self.delta_balance(from_addr, -value)
             return True
         return False
 
@@ -542,6 +517,7 @@ class State:
                 if self.account_exists(addr) or allow_empties:
                     _acct = _Account(
                         acct.nonce,
+                        acct.balance,
                         acct.token_balances.serialize(),
                         acct.storage,
                         acct.code_hash,
@@ -568,7 +544,7 @@ class State:
         return {encode_hex(addr): acct.to_dict() for addr, acct in self.cache.items()}
 
     def del_account(self, address):
-        self.set_balances(address, {})
+        self.set_balance(address, 0)
         self.set_nonce(address, 0)
         self.set_code(address, b"")
         self.reset_storage(address)
@@ -633,9 +609,9 @@ class State:
                     addr = decode_hex(addr)
                 assert len(addr) == 20
                 if "wei" in data:
-                    state.set_balances(addr, eval(data["wei"]))
-                if "token_balances" in data:
-                    state.set_balances(addr, eval(data["token_balances"]))
+                    state.set_balance(addr, parse_as_int(data["wei"]))
+                if "balance" in data:
+                    state.set_balance(addr, parse_as_int(data["balance"]))
                 if "code" in data:
                     state.set_code(addr, parse_as_bin(data["code"]))
                 if "nonce" in data:

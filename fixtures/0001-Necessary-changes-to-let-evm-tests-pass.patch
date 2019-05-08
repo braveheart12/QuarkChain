@@ -1,17 +1,4 @@
 diff --git a/quarkchain/evm/messages.py b/quarkchain/evm/messages.py
-index cb6f081..673374f 100644
---- a/quarkchain/evm/messages.py
-+++ b/quarkchain/evm/messages.py
-@@ -134,17 +134,11 @@ def config_fork_specific_validation(config, blknum, tx):
- 
- def validate_transaction(state, tx):
- 
--    # (0) multi native token, tx fee must be paid in QKC (0)
--    # TODODLL: change this
--    if tx.gas_token_id != 0:
--        raise InvalidTransaction("Gas token must be QKC")
--
-     # (1) The transaction signature is valid;
      if not tx.sender:  # sender is set and validated on Transaction initialization
          raise UnsignedTransaction(tx)
  
@@ -68,6 +55,9 @@ index cb6f081..673374f 100644
      # check block gas limit
      if state.gas_used + tx.startgas > state.gas_limit:
 @@ -217,7 +184,7 @@ def apply_message(state, msg=None, **kwargs):
+=======
+@@ -185,7 +184,7 @@ def apply_message(state, msg=None, **kwargs):
+>>>>>>> parent of 57612a4... [native] transfer tokens in shard state and evm (#320)
      return bytearray_to_bytestr(data) if result else None
  
  
@@ -76,6 +66,7 @@ index cb6f081..673374f 100644
      """tx_wrapper_hash is the hash for quarkchain.core.Transaction
      TODO: remove quarkchain.core.Transaction wrapper and use evm.Transaction directly
      """
+<<<<<<< HEAD
 @@ -241,10 +208,8 @@ def apply_transaction(state, tx: transactions.Transaction, tx_wrapper_hash):
      )
  
@@ -218,6 +209,11 @@ index cb6f081..673374f 100644
 @@ -501,9 +444,7 @@ def _apply_msg(ext, msg, code):
  
  
+=======
+@@ -444,9 +443,7 @@ def _apply_msg(ext, msg, code):
+
+
+>>>>>>> parent of 57612a4... [native] transfer tokens in shard state and evm (#320)
  def mk_contract_address(sender, full_shard_key, nonce):
 -    return utils.sha3(
 -        rlp.encode([utils.normalize_address(sender), full_shard_key, nonce])
@@ -226,6 +222,7 @@ index cb6f081..673374f 100644
  
  
  def create_contract(ext, msg):
+<<<<<<< HEAD
 @@ -512,10 +453,6 @@ def create_contract(ext, msg):
      if msg.is_cross_shard:
          return 0, msg.gas, b""
@@ -264,14 +261,22 @@ index 7056464..3132f83 100644
  
 @@ -69,10 +68,9 @@ STATE_DEFAULTS = {
  class _Account(rlp.Serializable):
+=======
+diff --git a/quarkchain/evm/state.py b/quarkchain/evm/state.py
+index 3007f2d..7862f6b 100644
+--- a/quarkchain/evm/state.py
++++ b/quarkchain/evm/state.py
+@@ -67,10 +67,8 @@ class _Account(rlp.Serializable):
+>>>>>>> parent of 57612a4... [native] transfer tokens in shard state and evm (#320)
      fields = [
          ("nonce", big_endian_int),
+         ("balance", big_endian_int),
 -        ("token_balances", binary),
-+        ("balance", big_endian_int),
          ("storage", trie_root),
          ("code_hash", hash32),
 -        ("full_shard_key", BigEndianInt(4)),
      ]
+<<<<<<< HEAD
  
  
 @@ -82,7 +80,7 @@ class TokenBalancePair(rlp.Serializable):
@@ -307,10 +312,15 @@ index 7056464..3132f83 100644
  
  class Account:
      def __init__(
+=======
+
+
+@@ -125,12 +123,11 @@ class Account:
+>>>>>>> parent of 57612a4... [native] transfer tokens in shard state and evm (#320)
          self,
          nonce,
+         balance,
 -        token_balances,
-+        balance,
          storage,
          code_hash,
 -        full_shard_key,
@@ -322,14 +332,24 @@ index 7056464..3132f83 100644
          db=None,
      ):
          self.db = env.db if db is None else db
+<<<<<<< HEAD
 @@ -140,12 +136,12 @@ class Account:
          self.env = env
          self.address = address
  
 -        acc = _Account(nonce, token_balances, storage, code_hash, full_shard_key)
+=======
+@@ -138,15 +135,12 @@ class Account:
+         self.env = env
+         self.address = address
+
+-        acc = _Account(
+-            nonce, balance, token_balances, storage, code_hash, full_shard_key
+-        )
+>>>>>>> parent of 57612a4... [native] transfer tokens in shard state and evm (#320)
 +        acc = _Account(nonce, balance, storage, code_hash)
          self.nonce = acc.nonce
-+        self.balance = acc.balance
+         self.balance = acc.balance
          self.storage = acc.storage
          self.code_hash = acc.code_hash
 -        self.full_shard_key = acc.full_shard_key
@@ -338,15 +358,20 @@ index 7056464..3132f83 100644
  
          self.storage_cache = {}
          self.storage_trie = SecureTrie(Trie(self.db))
+<<<<<<< HEAD
 @@ -194,7 +190,7 @@ class Account:
          db.put(BLANK_HASH, b"")
+=======
+@@ -196,7 +190,6 @@ class Account:
+>>>>>>> parent of 57612a4... [native] transfer tokens in shard state and evm (#320)
          o = cls(
              initial_nonce,
+             0,
 -            b"",
-+            0,
              trie.BLANK_ROOT,
              BLANK_HASH,
              full_shard_key,
+<<<<<<< HEAD
 @@ -206,11 +202,7 @@ class Account:
          return o
  
@@ -371,16 +396,20 @@ index 7056464..3132f83 100644
              "storage": {
 @@ -298,10 +290,9 @@ class State:
              o = rlp.decode(rlpdata, _Account)
+=======
+@@ -296,10 +289,8 @@ class State:
+>>>>>>> parent of 57612a4... [native] transfer tokens in shard state and evm (#320)
              o = Account(
                  nonce=o.nonce,
+                 balance=o.balance,
 -                token_balances=o.token_balances,
-+                balance=o.balance,
                  storage=o.storage,
                  code_hash=o.code_hash,
 -                full_shard_key=o.full_shard_key,
                  env=self.env,
                  address=address,
                  db=self.db,
+<<<<<<< HEAD
 @@ -319,15 +310,8 @@ class State:
          o._cached_rlp = None
          return o
@@ -480,10 +509,14 @@ index 7056464..3132f83 100644
          return False
  
 @@ -541,11 +507,7 @@ class State:
+=======
+@@ -514,12 +505,7 @@ class State:
+>>>>>>> parent of 57612a4... [native] transfer tokens in shard state and evm (#320)
                  self.changed[addr] = True
                  if self.account_exists(addr) or allow_empties:
                      _acct = _Account(
 -                        acct.nonce,
+-                        acct.balance,
 -                        acct.token_balances.serialize(),
 -                        acct.storage,
 -                        acct.code_hash,
@@ -492,6 +525,7 @@ index 7056464..3132f83 100644
                      )
                      self.trie.update(addr, rlp.encode(_acct))
                      if self.executing_on_head:
+<<<<<<< HEAD
 @@ -568,7 +530,7 @@ class State:
          return {encode_hex(addr): acct.to_dict() for addr, acct in self.cache.items()}
  
@@ -514,8 +548,10 @@ index 7056464..3132f83 100644
                  if "code" in data:
                      state.set_code(addr, parse_as_bin(data["code"]))
                  if "nonce" in data:
+=======
+>>>>>>> parent of 57612a4... [native] transfer tokens in shard state and evm (#320)
 diff --git a/quarkchain/evm/transactions.py b/quarkchain/evm/transactions.py
-index 644ab38..4c6a252 100644
+index 4c430cf..c7337e5 100644
 --- a/quarkchain/evm/transactions.py
 +++ b/quarkchain/evm/transactions.py
 @@ -247,10 +247,7 @@ class Transaction(rlp.Serializable):
@@ -530,6 +566,7 @@ index 644ab38..4c6a252 100644
  
      def __eq__(self, other):
          return isinstance(other, self.__class__) and self.hash == other.hash
+<<<<<<< HEAD
 diff --git a/quarkchain/evm/vm.py b/quarkchain/evm/vm.py
 index 02fcef9..48f4d93 100644
 --- a/quarkchain/evm/vm.py
@@ -598,3 +635,5 @@ index 02fcef9..48f4d93 100644
              ext.set_balance(msg.to, 0)
              ext.add_suicide(msg.to)
              log_msg.debug(
+=======
+>>>>>>> parent of 57612a4... [native] transfer tokens in shard state and evm (#320)

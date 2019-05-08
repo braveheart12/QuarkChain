@@ -47,7 +47,6 @@ from quarkchain.cluster.rpc import (
     GetMinorBlockResponse,
     GetTransactionResponse,
     AccountBranchData,
-    TokenBalancePair,
     BatchAddXshardTxListRequest,
     BatchAddXshardTxListResponse,
     MineResponse,
@@ -1125,7 +1124,7 @@ class SlaveServer:
             return None
         return shard.state.get_transaction_count(address.recipient)
 
-    def get_balances(self, address):
+    def get_balance(self, address):
         branch = Branch(
             self.env.quark_chain_config.get_full_shard_id_by_full_shard_key(
                 address.full_shard_key
@@ -1134,38 +1133,20 @@ class SlaveServer:
         shard = self.shards.get(branch, None)
         if not shard:
             return None
-        return shard.state.get_balances(address.recipient)
-
-    def get_token_balance(self, address):
-        branch = Branch(
-            self.env.quark_chain_config.get_full_shard_id_by_full_shard_key(
-                address.full_shard_key
-            )
-        )
-        shard = self.shards.get(branch, None)
-        if not shard:
-            return None
-        return shard.state.get_token_balance(address.recipient)
+        return shard.state.get_balance(address.recipient)
 
     def get_account_data(
         self, address: Address, block_height: Optional[int]
     ) -> List[AccountBranchData]:
         results = []
         for branch, shard in self.shards.items():
-            balance_list = []
-            token_balances = shard.state.get_balances(address.recipient, block_height)
-            for k in sorted(
-                token_balances
-            ):  # keep token balance sorted to maintain deterministic serialization
-                kv = TokenBalancePair(k, token_balances[k])
-                balance_list.append(kv)
             results.append(
                 AccountBranchData(
                     branch=branch,
                     transaction_count=shard.state.get_transaction_count(
                         address.recipient, block_height
                     ),
-                    token_balances=balance_list,
+                    balance=shard.state.get_balance(address.recipient, block_height),
                     is_contract=len(
                         shard.state.get_code(address.recipient, block_height)
                     )
