@@ -11,7 +11,7 @@ from quarkchain.core import (
     RootBlock,
 )
 from quarkchain.evm.state import State as EvmState
-from quarkchain.utils import sha3_256, check, token_id_encode
+from quarkchain.utils import sha3_256, check
 
 
 class GenesisManager:
@@ -56,9 +56,7 @@ class GenesisManager:
             evm_state.full_shard_key = address.full_shard_key
             if isinstance(alloc_amount, dict):
                 for k, v in alloc_amount.items():
-                    evm_state.delta_token_balance(
-                        address.recipient, token_id_encode(k), v
-                    )
+                    evm_state.delta_token_balance(address.recipient, k, v)
             else:
                 evm_state.delta_token_balance(
                     address.recipient, self._qkc_config.genesis_token, alloc_amount

@@ -10,7 +10,7 @@ from quarkchain.cluster.monitoring import KafkaSampleLogger
 from quarkchain.cluster.rpc import SlaveInfo
 from quarkchain.config import BaseConfig, ChainConfig, QuarkChainConfig
 from quarkchain.core import Address, ChainMask
-from quarkchain.utils import Logger, check, is_p2
+from quarkchain.utils import is_p2, check, Logger, token_id_encode
 
 DEFAULT_HOST = socket.gethostbyname(socket.gethostname())
 
@@ -28,11 +28,11 @@ def update_genesis_alloc(cluser_config):
     qkc_config = cluser_config.QUARKCHAIN
 
     allocation = {
-        qkc_config.GENESIS_TOKEN: 1000000 * (10 ** 18),
-        "QETC": 2 * (10 ** 8) * (10 ** 18),
-        "QFB": 3 * (10 ** 8) * (10 ** 18),
-        "QAAPL": 4 * (10 ** 8) * (10 ** 18),
-        "QTSLA": 5 * (10 ** 8) * (10 ** 18),
+        qkc_config.genesis_token: 1000000 * (10 ** 18),
+        token_id_encode("QETC"): 2 * (10 ** 8) * (10 ** 18),
+        token_id_encode("QFB"): 3 * (10 ** 8) * (10 ** 18),
+        token_id_encode("QAAPL"): 4 * (10 ** 8) * (10 ** 18),
+        token_id_encode("QTSLA"): 5 * (10 ** 8) * (10 ** 18),
     }
 
     old_shards = copy.deepcopy(qkc_config.shards)
