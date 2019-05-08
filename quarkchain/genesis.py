@@ -10,7 +10,7 @@ from quarkchain.core import (
     RootBlockHeader,
     RootBlock,
 )
-from quarkchain.evm.state import State as EvmState
+from quarkchain.evm.state import State as EvmState, DEFAULT_TOKEN
 from quarkchain.utils import sha3_256, check
 
 
@@ -39,7 +39,6 @@ class GenesisManager:
         """ Create genesis block for shard.
         Genesis block's hash_prev_root_block is set to the genesis root block.
         Genesis state will be committed to the given evm_state.
-        Based on ALLOC, genesis_token will be added to initial accounts.
         """
         branch = Branch(full_shard_id)
         shard_config = self._qkc_config.shards[full_shard_id]
@@ -59,7 +58,7 @@ class GenesisManager:
                     evm_state.delta_token_balance(address.recipient, k, v)
             else:
                 evm_state.delta_token_balance(
-                    address.recipient, self._qkc_config.genesis_token, alloc_amount
+                    address.recipient, DEFAULT_TOKEN, alloc_amount
                 )
 
         evm_state.commit()

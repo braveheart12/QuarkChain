@@ -39,9 +39,7 @@ def get_test_env(
     env.set_network_id(1234567890)
 
     env.cluster_config = ClusterConfig()
-    env.quark_chain_config.update(
-        chain_size, shard_size, 10, 1, env.quark_chain_config.GENESIS_TOKEN
-    )
+    env.quark_chain_config.update(chain_size, shard_size, 10, 1)
 
     if remote_mining:
         env.quark_chain_config.ROOT.CONSENSUS_CONFIG.REMOTE_MINE = True
@@ -95,13 +93,9 @@ def create_transfer_transaction(
     gas_price=1,
     nonce=None,
     data=b"",
-    gas_token_id=None,
-    transfer_token_id=None,
+    gas_token_id=DEFAULT_TOKEN,
+    transfer_token_id=DEFAULT_TOKEN,
 ):
-    if gas_token_id is None:
-        gas_token_id = shard_state.env.quark_chain_config.genesis_token
-    if transfer_token_id is None:
-        transfer_token_id = shard_state.env.quark_chain_config.genesis_token
     """ Create an in-shard xfer tx
     """
     evm_tx = EvmTransaction(

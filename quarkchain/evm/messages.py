@@ -25,7 +25,6 @@ from quarkchain.evm.exceptions import (
     InvalidTransaction,
 )
 from quarkchain.evm.slogging import get_logger
-from quarkchain.utils import token_id_encode
 
 
 null_address = b"\xff" * 20
@@ -40,9 +39,6 @@ CREATE_CONTRACT_ADDRESS = b""
 
 # DEV OPTIONS
 SKIP_MEDSTATES = False
-
-# TODODLL change to chain-specific token and genesis_token
-DEFAULT_TOKEN = token_id_encode("TQKC")
 
 
 def rp(tx, what, actual, target):
@@ -140,7 +136,7 @@ def validate_transaction(state, tx):
 
     # (0) multi native token, tx fee must be paid in QKC (0)
     # TODODLL: change this
-    if tx.gas_token_id != DEFAULT_TOKEN:
+    if tx.gas_token_id != 0:
         raise InvalidTransaction("Gas token must be QKC")
 
     # (1) The transaction signature is valid;
@@ -478,7 +474,7 @@ def _apply_msg(ext, msg, code):
         # Cross shard contract call is not supported
         return 1, msg.gas, []
 
-    if msg.transfer_token_id != DEFAULT_TOKEN:
+    if msg.transfer_token_id != 0:
         # TODODLL calling smart contract with non QKC transfer_token_id is not supported
         return 1, msg.gas, []
 
@@ -517,7 +513,7 @@ def create_contract(ext, msg):
     if msg.is_cross_shard:
         return 0, msg.gas, b""
 
-    if msg.transfer_token_id != DEFAULT_TOKEN:
+    if msg.transfer_token_id != 0:
         # TODODLL calling smart contract with non QKC transfer_token_id is not supported
         return 0, msg.gas, b""
 

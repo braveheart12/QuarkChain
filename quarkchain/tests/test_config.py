@@ -42,7 +42,6 @@ class TestQuarkChainConfig(unittest.TestCase):
     "SKIP_ROOT_DIFFICULTY_CHECK": false,
     "SKIP_ROOT_COINBASE_CHECK": false,
     "SKIP_MINOR_DIFFICULTY_CHECK": false,
-    "GENESIS_TOKEN": "TQKC",
     "ROOT": {
         "MAX_STALE_ROOT_BLOCK_HEIGHT_DIFF": 60,
         "CONSENSUS_TYPE": "POW_SIMULATE",
@@ -68,7 +67,6 @@ class TestQuarkChainConfig(unittest.TestCase):
         {
             "CHAIN_ID": 0,
             "SHARD_SIZE": 2,
-            "DEFAULT_CHAIN_TOKEN": "TQKC",
             "CONSENSUS_TYPE": "POW_DOUBLESHA256",
             "CONSENSUS_CONFIG": {
                 "TARGET_BLOCK_TIME": 10,
@@ -108,7 +106,6 @@ class TestQuarkChainConfig(unittest.TestCase):
         {
             "CHAIN_ID": 1,
             "SHARD_SIZE": 2,
-            "DEFAULT_CHAIN_TOKEN": "TQKC",
             "CONSENSUS_TYPE": "POW_DOUBLESHA256",
             "CONSENSUS_CONFIG": {
                 "TARGET_BLOCK_TIME": 10,
@@ -148,7 +145,6 @@ class TestQuarkChainConfig(unittest.TestCase):
         {
             "CHAIN_ID": 2,
             "SHARD_SIZE": 2,
-            "DEFAULT_CHAIN_TOKEN": "TQKC",
             "CONSENSUS_TYPE": "POW_DOUBLESHA256",
             "CONSENSUS_CONFIG": {
                 "TARGET_BLOCK_TIME": 10,

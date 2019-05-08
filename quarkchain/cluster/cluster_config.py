@@ -11,6 +11,7 @@ from quarkchain.cluster.rpc import SlaveInfo
 from quarkchain.config import BaseConfig, ChainConfig, QuarkChainConfig
 from quarkchain.core import Address, ChainMask
 from quarkchain.utils import is_p2, check, Logger, token_id_encode
+from quarkchain.evm.state import DEFAULT_TOKEN
 
 DEFAULT_HOST = socket.gethostbyname(socket.gethostname())
 
@@ -28,7 +29,7 @@ def update_genesis_alloc(cluser_config):
     qkc_config = cluser_config.QUARKCHAIN
 
     allocation = {
-        qkc_config.genesis_token: 1000000 * (10 ** 18),
+        DEFAULT_TOKEN: 1000000 * (10 ** 18),
         token_id_encode("QETC"): 2 * (10 ** 8) * (10 ** 18),
         token_id_encode("QFB"): 3 * (10 ** 8) * (10 ** 18),
         token_id_encode("QAAPL"): 4 * (10 ** 8) * (10 ** 18),
@@ -227,12 +228,6 @@ class ClusterConfig(BaseConfig):
         parser.add_argument(
             "--network_id", default=QuarkChainConfig.NETWORK_ID, type=int
         )
-        parser.add_argument(
-            "--default_token",
-            default=QuarkChainConfig.GENESIS_TOKEN,
-            type=str,
-            help="sets GENESIS_TOKEN and DEFAULT_CHAIN_TOKEN",
-        )
 
         parser.add_argument("--num_slaves", default=4, type=int)
         parser.add_argument("--port_start", default=38000, type=int)
@@ -328,7 +323,6 @@ class ClusterConfig(BaseConfig):
                 args.num_shards_per_chain,
                 args.root_block_interval_sec,
                 args.minor_block_interval_sec,
-                args.default_token,
             )
             config.QUARKCHAIN.NETWORK_ID = args.network_id
 

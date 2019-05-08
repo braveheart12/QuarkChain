@@ -25,7 +25,6 @@ from quarkchain.evm.securetrie import SecureTrie
 from quarkchain.evm.config import Env
 from quarkchain.db import Db, OverlayDb
 from quarkchain.evm.common import FakeHeader
-from quarkchain.utils import token_id_encode
 import copy
 
 
@@ -34,8 +33,7 @@ BLANK_ROOT = utils.sha3rlp(b"")
 
 THREE = b"\x00" * 19 + b"\x03"
 
-# TODODLL change to chain-specific token and genesis_token
-DEFAULT_TOKEN = token_id_encode("TQKC")
+DEFAULT_TOKEN = 0
 TOKEN_TRIE_THRESHOLD = 16
 
 
