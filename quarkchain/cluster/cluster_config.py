@@ -28,15 +28,6 @@ def update_genesis_alloc(cluser_config):
 
     qkc_config = cluser_config.QUARKCHAIN
 
-    allocation = {
-        DEFAULT_TOKEN: 1000000 * (10 ** 18),
-        token_id_encode("QETC"): 2 * (10 ** 8) * (10 ** 18),
-        token_id_encode("QFB"): 3 * (10 ** 8) * (10 ** 18),
-        token_id_encode("QAAPL"): 4 * (10 ** 8) * (10 ** 18),
-        token_id_encode("QTSLA"): 5 * (10 ** 8) * (10 ** 18),
-    }
-
-    old_shards = copy.deepcopy(qkc_config.shards)
     try:
         for chain_id in range(qkc_config.CHAIN_SIZE):
             alloc_file = alloc_file_template.format(chain_id)
@@ -49,7 +40,7 @@ def update_genesis_alloc(cluser_config):
                 )
                 qkc_config.shards[full_shard_id].GENESIS.ALLOC[
                     item["address"]
-                ] = allocation
+                ] = 1000000 * (10 ** 18)
 
             Logger.info(
                 "[{}] Imported {} genesis accounts into config from {}".format(
@@ -74,7 +65,7 @@ def update_genesis_alloc(cluser_config):
             for full_shard_id, shard_config in qkc_config.shards.items():
                 shard_config.GENESIS.ALLOC[
                     address.address_in_shard(full_shard_id).serialize().hex()
-                ] = allocation
+                ] = 1000 * (10 ** 18)
 
         Logger.info(
             "Imported {} loadtest accounts from {}".format(len(items), loadtest_file)
