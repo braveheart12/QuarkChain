@@ -19,8 +19,6 @@ class TestTypedSignature(unittest.TestCase):
         network_id=0x03,
         from_full_shard_key=0xc47decfd,
         to_full_shard_key=0xc49c1950,
-        gas_token_id=0x0111,
-        transfer_token_id=0x0222,
     )
 
     tx = [

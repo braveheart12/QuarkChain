@@ -13,7 +13,6 @@ from jsonrpcserver.async_methods import AsyncMethods
 from jsonrpcserver.exceptions import InvalidParams
 
 from quarkchain.cluster.master import MasterServer
-from quarkchain.cluster.rpc import TokenBalancePair
 from quarkchain.core import (
     Address,
     Branch,
@@ -314,19 +313,6 @@ def receipt_encoder(block: MinorBlock, i: int, receipt: TransactionReceipt):
     }
 
     return resp
-
-
-def balances_encoder(balances: List[TokenBalancePair]) -> List[Dict]:
-    balance_list = []
-    for pair in balances:
-        balance_list.append(
-            {
-                "tokenId": quantity_encoder(pair.token_id),
-                "tokenStr": token_id_decode(pair.token_id),
-                "balance": quantity_encoder(pair.balance),
-            }
-        )
-    return balance_list
 
 
 def decode_arg(name, decoder):

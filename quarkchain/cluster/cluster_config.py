@@ -10,8 +10,7 @@ from quarkchain.cluster.monitoring import KafkaSampleLogger
 from quarkchain.cluster.rpc import SlaveInfo
 from quarkchain.config import BaseConfig, ChainConfig, QuarkChainConfig
 from quarkchain.core import Address, ChainMask
-from quarkchain.utils import is_p2, check, Logger, token_id_encode
-from quarkchain.evm.state import DEFAULT_TOKEN
+from quarkchain.utils import is_p2, check, Logger
 
 DEFAULT_HOST = socket.gethostbyname(socket.gethostname())
 
@@ -51,7 +50,6 @@ def update_genesis_alloc(cluser_config):
         Logger.warning(
             "Error importing genesis accounts from {}: {}".format(alloc_file, e)
         )
-        qkc_config.shards = old_shards
         Logger.warning("Cleared all partially imported genesis accounts!")
 
     # each account in loadtest file is funded on all the shards
