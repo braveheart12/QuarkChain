@@ -67,7 +67,7 @@ class _Account(rlp.Serializable):
         ("balance", big_endian_int),
         ("storage", trie_root),
         ("code_hash", hash32),
-        ("full_shard_key", BigEndianInt(4)),
+        ("full_shard_key", big_endian_int),
     ]
 
 

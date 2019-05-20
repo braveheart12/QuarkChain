@@ -513,13 +513,13 @@ class JSONRPCServer:
             Address.deserialize(address), block_height
         )
         branch = account_branch_data.branch
-        balances = account_branch_data.token_balances
+        balances = account_branch_data.balance
         return {
             "branch": quantity_encoder(branch.value),
             "fullShardId": quantity_encoder(branch.get_full_shard_id()),
             "shardId": quantity_encoder(branch.get_shard_id()),
             "chainId": quantity_encoder(branch.get_chain_id()),
-            "balances": balances_encoder(balances),
+            "balances": quantity_encoder(balances)
         }
 
     @public_methods.add
