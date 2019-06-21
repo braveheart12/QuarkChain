@@ -11,7 +11,10 @@ from decorator import decorator
 from jsonrpcserver import config
 from jsonrpcserver.async_methods import AsyncMethods
 from jsonrpcserver.exceptions import InvalidParams
-
+from quarkchain.cluster.p2p_commands import (
+    NewTransactionListCommand,
+    GetRootBlockListResponse,
+)
 from quarkchain.cluster.master import MasterServer
 from quarkchain.core import (
     Address,
@@ -20,6 +23,7 @@ from quarkchain.core import (
     Log,
     MinorBlock,
     RootBlock,
+    SerializedEvmTransaction,
     Transaction,
     TransactionReceipt,
 )
@@ -208,6 +212,7 @@ def minor_block_encoder(block, include_transactions=False):
         "nonce": quantity_encoder(header.nonce),
         "hashMerkleRoot": data_encoder(meta.hash_merkle_root),
         "hashEvmStateRoot": data_encoder(meta.hash_evm_state_root),
+        "receiptHash":data_encoder(meta.hash_evm_receipt_root),
         "miner": address_encoder(header.coinbase_address.serialize()),
         "coinbase": quantity_encoder(header.coinbase_amount),
         "difficulty": quantity_encoder(header.difficulty),
@@ -235,7 +240,7 @@ def tx_encoder(block, i):
     `transaction` is the `i`th transaction in `block`.
     """
     tx = block.tx_list[i]
-    evm_tx = tx.code.get_evm_transaction()
+    evm_tx = tx.tx.to_evm_tx()
     branch = block.header.branch
     return {
         "id": id_encoder(tx.get_hash(), evm_tx.from_full_shard_key),
@@ -257,10 +262,7 @@ def tx_encoder(block, i):
         "gas": quantity_encoder(evm_tx.startgas),
         "data": data_encoder(evm_tx.data),
         "networkId": quantity_encoder(evm_tx.network_id),
-        "transferTokenId": quantity_encoder(evm_tx.transfer_token_id),
-        "gasTokenId": quantity_encoder(evm_tx.gas_token_id),
-        "transferTokenStr": token_id_decode(evm_tx.transfer_token_id),
-        "gasTokenStr": token_id_decode(evm_tx.gas_token_id),
+         "balabce":quantity_encoder(evm_tx.value),
         "r": quantity_encoder(evm_tx.r),
         "s": quantity_encoder(evm_tx.s),
         "v": quantity_encoder(evm_tx.v),
@@ -290,7 +292,7 @@ def loglist_encoder(loglist: List[Log]):
 
 def receipt_encoder(block: MinorBlock, i: int, receipt: TransactionReceipt):
     tx = block.tx_list[i]
-    evm_tx = tx.code.get_evm_transaction()
+    evm_tx = tx.tx.to_evm_tx()
     resp = {
         "transactionId": id_encoder(tx.get_hash(), evm_tx.from_full_shard_key),
         "transactionHash": data_encoder(tx.get_hash()),
@@ -538,12 +540,12 @@ class JSONRPCServer:
             branch = account_branch_data.branch
             count = account_branch_data.transaction_count
 
-            balances = account_branch_data.token_balances
+            balances = account_branch_data.balance
             primary = {
                 "fullShardId": quantity_encoder(branch.get_full_shard_id()),
                 "shardId": quantity_encoder(branch.get_shard_id()),
                 "chainId": quantity_encoder(branch.get_chain_id()),
-                "balances": balances_encoder(balances),
+                "balances": quantity_encoder(balances),
                 "transactionCount": quantity_encoder(count),
                 "isContract": account_branch_data.is_contract,
             }
@@ -553,12 +555,12 @@ class JSONRPCServer:
 
         shards = []
         for branch, account_branch_data in branch_to_account_branch_data.items():
-            balances = account_branch_data.token_balances
+            balances = account_branch_data.balance
             data = {
                 "fullShardId": quantity_encoder(branch.get_full_shard_id()),
                 "shardId": quantity_encoder(branch.get_shard_id()),
                 "chainId": quantity_encoder(branch.get_chain_id()),
-                "balances": balances_encoder(balances),
+                "balances": quantity_encoder(balances),
                 "transactionCount": quantity_encoder(
                     account_branch_data.transaction_count
                 ),
@@ -682,7 +684,7 @@ class JSONRPCServer:
             to_full_shard_key=to_full_shard_key,
             network_id=network_id,
         )
-        tx = Transaction(code=Code.create_evm_code(evm_tx))
+        tx = Transaction(SerializedEvmTransaction.from_evm_tx(evm_tx))
         success = await self.master.add_transaction(tx)
         if not success:
             return None
@@ -693,10 +695,11 @@ class JSONRPCServer:
     @decode_arg("tx_data", data_decoder)
     async def sendRawTransaction(self, tx_data):
         evm_tx = rlp.decode(tx_data, EvmTransaction)
-        tx = Transaction(code=Code.create_evm_code(evm_tx))
+        tx = Transaction(SerializedEvmTransaction.from_evm_tx(evm_tx))
         success = await self.master.add_transaction(tx)
         if not success:
             return "0x" + bytes(32 + 4).hex()
+
         return id_encoder(tx.get_hash(), evm_tx.from_full_shard_key)
 
     @public_methods.add
@@ -848,10 +851,10 @@ class JSONRPCServer:
                     if tx.to_address
                     else "0x",
                     "value": quantity_encoder(tx.value),
-                    "transferTokenId": quantity_encoder(tx.transfer_token_id),
-                    "transferTokenStr": token_id_decode(tx.transfer_token_id),
-                    "gasTokenId": quantity_encoder(tx.gas_token_id),
-                    "gasTokenStr": token_id_decode(tx.gas_token_id),
+                    # "transferTokenId": quantity_encoder(tx.transfer_token_id),
+                    # "transferTokenStr": token_id_decode(tx.transfer_token_id),
+                    # "gasTokenId": quantity_encoder(tx.gas_token_id),
+                    # "gasTokenStr": token_id_decode(tx.gas_token_id),
                     "blockHeight": quantity_encoder(tx.block_height),
                     "timestamp": quantity_encoder(tx.timestamp),
                     "success": tx.success,
@@ -1111,7 +1114,7 @@ class JSONRPCServer:
             data,
             from_full_shard_key=from_full_shard_key,
         )
-        tx = Transaction(code=Code.create_evm_code(evm_tx_sample))
+        tx = Transaction(SerializedEvmTransaction.from_evm_tx(evm_tx_sample))
         return await self.master.create_transactions(
             num_tx_per_shard, x_shard_percent, tx
         )
@@ -1222,7 +1225,7 @@ class JSONRPCServer:
             network_id=network_id,
         )
 
-        tx = Transaction(code=Code.create_evm_code(evm_tx))
+        tx = Transaction(SerializedEvmTransaction.from_evm_tx(evm_tx))
         if is_call:
             res = await self.master.execute_transaction(
                 tx, sender_address, data["block_height"]

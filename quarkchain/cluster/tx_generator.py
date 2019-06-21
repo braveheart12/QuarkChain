@@ -4,7 +4,7 @@ import time
 from typing import Optional
 
 from quarkchain.config import QuarkChainConfig
-from quarkchain.core import Address, Code, Transaction
+from quarkchain.core import Address, Code, Transaction ,SerializedEvmTransaction
 from quarkchain.evm.transactions import Transaction as EvmTransaction
 from quarkchain.utils import Logger
 
@@ -49,7 +49,7 @@ class TransactionGenerator:
         start_time = time.time()
         tx_list = []
         total = 0
-        sample_evm_tx = sample_tx.code.get_evm_transaction()
+        sample_evm_tx = sample_tx.tx.to_evm_tx()
         for account in self.accounts:
             nonce = self.shard.state.get_transaction_count(account.address.recipient)
             tx = self.create_transaction(account, nonce, x_shard_percent, sample_evm_tx)
@@ -125,4 +125,4 @@ class TransactionGenerator:
             network_id=self.qkc_config.NETWORK_ID,
         )
         evm_tx.sign(account.key)
-        return Transaction(code=Code.create_evm_code(evm_tx))
+        return Transaction(SerializedEvmTransaction.from_evm_tx(evm_tx))

@@ -588,62 +588,47 @@ class Code(Serializable):
         assert self.is_evm()
         return rlp.decode(self.code[1:], EvmTransaction)
 
+class TransactionType:
+    SERIALIZED_EVM = 1
+class SerializedEvmTransaction(Serializable):
+    FIELDS = [("type", uint8), ("serialized_tx", PrependedSizeBytesSerializer(4))]
 
+    def __init__(self, type, serialized_tx):
+        check(type == TransactionType.SERIALIZED_EVM)
+        self.type = TransactionType.SERIALIZED_EVM
+        self.serialized_tx = serialized_tx
+
+    @classmethod
+    def from_evm_tx(cls, evm_tx: EvmTransaction):
+        return SerializedEvmTransaction(
+            TransactionType.SERIALIZED_EVM, rlp.encode(evm_tx)
+        )
+
+    def to_evm_tx(self) -> EvmTransaction:
+        return rlp.decode(self.serialized_tx, EvmTransaction)
 class Transaction(Serializable):
+    # The wrapped tx can be of any transaction type
+    # To add new transaction type:
+    #     1. Add a new type in TransactionType
+    #     2. Create the new transaction class and make sure the first field is ("type", uint8)
+    #     3. Add the new tx type to the EnumSerializer
+    #     4. Add a new test to TestTypedTransaction in test_core.py
     FIELDS = [
-        ("in_list", PrependedSizeListSerializer(1, TransactionInput)),
-        ("code", Code),
-        ("out_list", PrependedSizeListSerializer(1, TransactionOutput)),
-        ("sign_list", PrependedSizeListSerializer(1, FixedSizeBytesSerializer(65))),
+        (
+            "tx",
+            EnumSerializer(
+                "type",
+                {TransactionType.SERIALIZED_EVM: SerializedEvmTransaction},
+                size=1,
+            ),
+        )
     ]
 
-    def __init__(self, in_list=None, code=Code(), out_list=None, sign_list=None):
-        self.in_list = [] if in_list is None else in_list
-        self.out_list = [] if out_list is None else out_list
-        self.sign_list = [] if sign_list is None else sign_list
-        self.code = code
-
-    def serialize_unsigned(self, barray: bytearray = None) -> bytearray:
-        barray = barray if barray is not None else bytearray()
-        return self.serialize_without(["sign_list"], barray)
+    def __init__(self, tx):
+        self.tx = tx
 
     def get_hash(self):
         return sha3_256(self.serialize())
-
-    def get_hash_hex(self):
-        return self.get_hash().hex()
-
-    def get_hash_unsigned(self):
-        return sha3_256(self.serialize_unsigned())
-
-    def sign(self, keys):
-        """ Sign the transaction with keys.  It doesn't mean the transaction is valid in the chain since it doesn't
-        check whether the tx_input's addresses (recipents) match the keys
-        """
-        sign_list = []
-        for key in keys:
-            sig = KeyAPI.PrivateKey(key).sign_msg(self.get_hash_unsigned())
-            sign_list.append(
-                sig.r.to_bytes(32, byteorder="big")
-                + sig.s.to_bytes(32, byteorder="big")
-                + sig.v.to_bytes(1, byteorder="big")
-            )
-        self.sign_list = sign_list
-        return self
-
-    def verify_signature(self, recipients):
-        """ Verify whether the signatures are from a list of recipients.  Doesn't verify if the transaction is valid on
-        the chain
-        """
-        if len(recipients) != len(self.sign_list):
-            return False
-
-        for i in range(len(recipients)):
-            sig = KeyAPI.Signature(signature_bytes=self.sign_list[i])
-            pub = sig.recover_public_key_from_msg(self.get_hash_unsigned())
-            if pub.to_canonical_address() != recipients[i]:
-                return False
-        return True
 
 
 def calculate_merkle_root(item_list):
@@ -851,7 +836,7 @@ class MinorBlock(Serializable):
         )
 
     def get_block_prices(self) -> List[int]:
-        return [tx.code.get_evm_transaction().gasprice for tx in self.tx_list]
+        return [tx.tx.to_evm_tx().gasprice for tx in self.tx_list]
 
     def create_block_to_append(
         self,

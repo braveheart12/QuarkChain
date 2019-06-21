@@ -91,7 +91,7 @@ class Receipt(rlp.Serializable):
         ("bloom", int256),
         ("logs", CountableList(Log)),
         ("contract_address", Binary.fixed_length(20, allow_empty=True)),
-        ("contract_full_shard_key", BigEndianInt(4)),
+        ("contract_full_shard_key", big_endian_int),
     ]
 
     @property
@@ -103,12 +103,17 @@ class Receipt(rlp.Serializable):
 def mk_receipt(state, success, logs, contract_address, contract_full_shard_key):
     bloomables = [x.bloomables() for x in logs]
     ret_bloom = bloom.bloom_from_list(utils.flatten(bloomables))
+    if len(contract_address) == 0:
+        fakeAddress = quarkchain.core.Address.create_empty_account(0).recipient
+    else:
+        fakeAddress=contract_address
+
     o = Receipt(
         state_root=b"\x01" if success else b"",
         gas_used=state.gas_used,
         bloom=ret_bloom,
         logs=logs,
-        contract_address=contract_address,
+        contract_address=fakeAddress,
         contract_full_shard_key=contract_full_shard_key,
     )
     return o
@@ -261,7 +266,7 @@ def apply_transaction(state, tx: transactions.Transaction, tx_wrapper_hash):
             // local_fee_rate.denominator
         )
         state.delta_balance(state.block_coinbase, fee)
-        state.block_fee += tx.gasprice * gas_used
+        state.block_fee += fee #this version 's bug
         output = b""
         success = 0
     # Transaction success

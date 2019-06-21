@@ -17,6 +17,7 @@ from quarkchain.core import (
     Branch,
     Code,
     RootBlock,
+    SerializedEvmTransaction,
     Transaction,
     Log,
 )
@@ -217,21 +218,21 @@ class ShardState:
         self, tx: Transaction, evm_state, from_address=None, gas=None
     ) -> EvmTransaction:
         """from_address will be set for execute_tx"""
-        # UTXOs are not supported now
-        if len(tx.in_list) != 0:
-            raise RuntimeError("input list must be empty")
-        if len(tx.out_list) != 0:
-            raise RuntimeError("output list must be empty")
-        if len(tx.sign_list) != 0:
-            raise RuntimeError("sign list must be empty")
+        # # UTXOs are not supported now
+        # if len(tx.in_list) != 0:
+        #     raise RuntimeError("input list must be empty")
+        # if len(tx.out_list) != 0:
+        #     raise RuntimeError("output list must be empty")
+        # if len(tx.sign_list) != 0:
+        #     raise RuntimeError("sign list must be empty")
+        #
+        # # Check OP code
+        # if len(tx.code.code) == 0:
+        #     raise RuntimeError("empty op code")
+        # if not tx.code.is_evm():
+        #     raise RuntimeError("only evm transaction is supported now")
 
-        # Check OP code
-        if len(tx.code.code) == 0:
-            raise RuntimeError("empty op code")
-        if not tx.code.is_evm():
-            raise RuntimeError("only evm transaction is supported now")
-
-        evm_tx = tx.code.get_evm_transaction()
+        evm_tx = tx.tx.to_evm_tx()
 
         if from_address:
             check(evm_tx.from_full_shard_key == from_address.full_shard_key)
@@ -652,13 +653,13 @@ class ShardState:
     def __add_transactions_from_block(self, block):
         for tx in block.tx_list:
             self.tx_dict[tx.get_hash()] = tx
-            self.tx_queue.add_transaction(tx.code.get_evm_transaction())
+            self.tx_queue.add_transaction(tx.tx.to_evm_tx())
 
     def __remove_transactions_from_block(self, block):
         evm_tx_list = []
         for tx in block.tx_list:
             self.tx_dict.pop(tx.get_hash(), None)
-            evm_tx_list.append(tx.code.get_evm_transaction())
+            evm_tx_list.append(tx.tx.to_evm_tx())
         self.tx_queue = self.tx_queue.diff(evm_tx_list)
 
     def add_block(self, block, skip_if_too_old=True):
@@ -877,7 +878,7 @@ class ShardState:
         state.gas_used = 0
 
         # Use the maximum gas allowed if gas is 0
-        evm_tx = tx.code.get_evm_transaction()
+        evm_tx =  tx.tx.to_evm_tx()
         gas = evm_tx.startgas if evm_tx.startgas else state.gas_limit
 
         try:
@@ -985,7 +986,7 @@ class ShardState:
                     continue
 
             try:
-                tx = Transaction(code=Code.create_evm_code(evm_tx))
+                tx = Transaction(SerializedEvmTransaction.from_evm_tx(evm_tx))
                 apply_transaction(evm_state, evm_tx, tx.get_hash())
                 block.add_tx(tx)
                 poped_txs.append(evm_tx)
@@ -994,7 +995,7 @@ class ShardState:
                 Logger.warning_every_sec(
                     "Failed to include transaction: {}".format(e), 1
                 )
-                tx = Transaction(code=Code.create_evm_code(evm_tx))
+                tx = Transaction(SerializedEvmTransaction.from_evm_tx(evm_tx))
                 self.tx_dict.pop(tx.get_hash(), None)
 
         # We don't want to drop the transactions if the mined block failed to be appended
@@ -1419,7 +1420,7 @@ class ShardState:
                 if Address(tx.sender, tx.from_full_shard_key) == address:
                     tx_list.append(
                         TransactionDetail(
-                            Transaction(code=Code.create_evm_code(tx)).get_hash(),
+                            Transaction(SerializedEvmTransaction.from_evm_tx(tx).get_hash()),
                             address,
                             Address(tx.to, tx.to_full_shard_key) if tx.to else None,
                             tx.value,
@@ -1494,7 +1495,7 @@ class ShardState:
 
     def estimate_gas(self, tx: Transaction, from_address) -> Optional[int]:
         """Estimate a tx's gas usage by binary searching."""
-        evm_tx_start_gas = tx.code.get_evm_transaction().startgas
+        evm_tx_start_gas = tx.tx.to_evm_tx()
         # binary search. similar as in go-ethereum
         lo = 21000 - 1
         hi = evm_tx_start_gas if evm_tx_start_gas > 21000 else self.evm_state.gas_limit
