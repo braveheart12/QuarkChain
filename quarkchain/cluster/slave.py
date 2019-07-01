@@ -32,8 +32,6 @@ from quarkchain.cluster.rpc import (
     SubmitWorkRequest,
     SubmitWorkResponse,
     AddMinorBlockHeaderListRequest,
-    EchoRequest,
-    EchoResponse,
 )
 from quarkchain.cluster.rpc import (
     AddRootBlockResponse,
@@ -496,7 +494,7 @@ class MasterConnection(ClusterConnection):
         return GetCodeResponse(error_code=int(fail), result=res or b"")
 
     async def handle_gas_price(self, req: GasPriceRequest) -> GasPriceResponse:
-        res = self.slave_server.gas_price(req.branch)
+        res = self.slave_server.gas_price(req.branch, req.token_id)
         fail = res is None
         return GasPriceResponse(error_code=int(fail), result=res or 0)
 
@@ -519,9 +517,6 @@ class MasterConnection(ClusterConnection):
             return SubmitWorkResponse(error_code=1, success=False)
 
         return SubmitWorkResponse(error_code=0, success=res)
-
-    async def handle_echo(self, req: EchoRequest) -> EchoResponse:
-        return EchoResponse(error_code=0, result=str.encode(self.slave_server.name))
 
 
 MASTER_OP_NONRPC_MAP = {
@@ -627,7 +622,6 @@ MASTER_OP_RPC_MAP = {
         ClusterOp.SUBMIT_WORK_RESPONSE,
         MasterConnection.handle_submit_work,
     ),
-    ClusterOp.ECHO_REQUEST: (ClusterOp.ECHO_RESPONSE, MasterConnection.handle_echo),
 }
 
 
@@ -1294,11 +1288,11 @@ class SlaveServer:
             return None
         return shard.state.get_code(address.recipient, block_height)
 
-    def gas_price(self, branch: Branch) -> Optional[int]:
+    def gas_price(self, branch: Branch, token_id: int) -> Optional[int]:
         shard = self.shards.get(branch, None)
         if not shard:
             return None
-        return shard.state.gas_price()
+        return shard.state.gas_price(token_id)
 
     async def get_work(self, branch: Branch) -> Optional[MiningWork]:
         if branch not in self.shards:
@@ -1345,10 +1339,7 @@ def main():
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     env = parse_args()
 
-    import random
-
-    name = random.choice(["btc", "eth", "qkc", "xrp", "ltc"])
-    slave_server = SlaveServer(env, name)
+    slave_server = SlaveServer(env)
     slave_server.start()
     slave_server.do_loop()
 

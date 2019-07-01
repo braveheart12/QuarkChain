@@ -53,7 +53,6 @@ from quarkchain.cluster.rpc import (
     SubmitWorkResponse,
     AddMinorBlockHeaderListResponse,
     RootBlockSychronizerStats,
-    EchoRequest,
 )
 from quarkchain.cluster.rpc import (
     ConnectToSlavesRequest,
@@ -626,8 +625,8 @@ class SlaveConnection(ClusterConnection):
         _, resp, _ = await self.write_rpc_request(ClusterOp.GET_CODE_REQUEST, request)
         return resp.result if resp.error_code == 0 else None
 
-    async def gas_price(self, branch: Branch) -> Optional[int]:
-        request = GasPriceRequest(branch)
+    async def gas_price(self, branch: Branch, token_id: int) -> Optional[int]:
+        request = GasPriceRequest(branch, token_id)
         _, resp, _ = await self.write_rpc_request(ClusterOp.GAS_PRICE_REQUEST, request)
         return resp.result if resp.error_code == 0 else None
 
@@ -1469,12 +1468,12 @@ class MasterServer:
         slave = self.branch_to_slaves[full_shard_id][0]
         return await slave.get_code(address, block_height)
 
-    async def gas_price(self, branch: Branch) -> Optional[int]:
+    async def gas_price(self, branch: Branch, token_id: int) -> Optional[int]:
         if branch.value not in self.branch_to_slaves:
             return None
 
         slave = self.branch_to_slaves[branch.value][0]
-        return await slave.gas_price(branch)
+        return await slave.gas_price(branch, token_id)
 
     async def get_work(self, branch: Optional[Branch]) -> Optional[MiningWork]:
         if not branch:  # get root chain work
@@ -1503,15 +1502,6 @@ class MasterServer:
             return False
         slave = self.branch_to_slaves[branch.value][0]
         return await slave.submit_work(branch, header_hash, nonce, mixhash)
-
-    async def echo(self):
-        futures = []
-        for slave in self.slave_pool:
-            request = EchoRequest()
-            futures.append(slave.write_rpc_request(ClusterOp.ECHO_REQUEST, request))
-        responses = await asyncio.gather(*futures)
-        check(all([resp.error_code == 0 for _, resp, _ in responses]))
-        return "\n".join(resp.result.decode("ascii") for _, resp, _ in responses)
 
 
 def parse_args():
@@ -1542,10 +1532,8 @@ def main():
     root_state = RootState(env)
 
     # p2p discovery mode will disable master-slave communication and JSONRPC
-    start_master, jsonrpc_enabled = True, True
-    if env.cluster_config.P2P:
-        start_master = not env.cluster_config.P2P.DISCOVERY_ONLY
-        jsonrpc_enabled = not env.cluster_config.P2P.DISCOVERY_ONLY
+    start_master = not env.cluster_config.P2P.DISCOVERY_ONLY
+    jsonrpc_enabled = not env.cluster_config.P2P.DISCOVERY_ONLY
 
     master = MasterServer(env, root_state)
 
