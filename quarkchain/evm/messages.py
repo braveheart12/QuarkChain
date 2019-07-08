@@ -197,19 +197,24 @@ def validate_transaction(state, tx):
 
 
 def apply_transaction_message(
-    state, message, ext, should_create_contract, gas_used_start, is_cross_shard=False
+    state,
+    message,
+    ext,
+    should_create_contract,
+    gas_used_start,
+    is_cross_shard=False,
+    contract_address=b"",
 ):
     local_fee_rate = (
         1 - state.qkc_config.reward_tax_rate if state.qkc_config else Fraction(1)
     )
 
-    contract_address = b""
-
     evm_gas_start = message.gas
     if not should_create_contract:
         result, gas_remained, data = apply_msg(ext, message)
+        contract_address = b""
     else:  # CREATE
-        result, gas_remained, data = create_contract(ext, message)
+        result, gas_remained, data = create_contract(ext, message, contract_address)
         contract_address = (
             data if data else b""
         )  # data could be [] when vm failed execution
@@ -289,6 +294,7 @@ def apply_xshard_desposit(state, deposit, gas_used_start):
     message_data = vm.CallData(
         [safe_ord(x) for x in deposit.message_data], 0, len(deposit.message_data)
     )
+
     message = vm.Message(
         deposit.from_address.recipient,
         deposit.to_address.recipient,
@@ -296,7 +302,6 @@ def apply_xshard_desposit(state, deposit, gas_used_start):
         deposit.gas_remained,
         message_data,
         code_address=deposit.to_address.recipient,
-        is_cross_shard=False,
         from_full_shard_key=deposit.from_address.full_shard_key,
         to_full_shard_key=deposit.to_address.full_shard_key,
         tx_hash=deposit.tx_hash,
@@ -316,6 +321,9 @@ def apply_xshard_desposit(state, deposit, gas_used_start):
         should_create_contract=deposit.create_contract,
         gas_used_start=gas_used_start,
         is_cross_shard=True,
+        contract_address=deposit.to_address.recipient
+        if deposit.create_contract
+        else b"",
     )
 
 
@@ -357,7 +365,6 @@ def apply_transaction(state, tx: transactions.Transaction, tx_wrapper_hash):
         tx.startgas - intrinsic_gas,
         message_data,
         code_address=tx.to,
-        is_cross_shard=tx.is_cross_shard,
         from_full_shard_key=tx.from_full_shard_key,
         to_full_shard_key=tx.to_full_shard_key,
         tx_hash=tx_wrapper_hash,
@@ -377,8 +384,30 @@ def apply_transaction(state, tx: transactions.Transaction, tx_wrapper_hash):
             # Currently, burn all gas
             local_gas_used = tx.startgas
         elif tx.to == b"":
-            # TODO: support x-shard tx creation
-            success = 0
+            state.delta_token_balance(tx.sender, tx.transfer_token_id, -tx.value)
+            success = 1
+            remote_gas_reserved = tx.startgas - intrinsic_gas
+            ext.add_cross_shard_transaction_deposit(
+                quarkchain.core.CrossShardTransactionDeposit(
+                    tx_hash=tx_wrapper_hash,
+                    from_address=quarkchain.core.Address(
+                        tx.sender, tx.from_full_shard_key
+                    ),
+                    to_address=quarkchain.core.Address(
+                        mk_contract_address(
+                            tx.sender, tx.to_full_shard_key, state.get_nonce(tx.sender)
+                        ),
+                        tx.to_full_shard_key,
+                    ),
+                    value=tx.value,
+                    gas_price=tx.gasprice,
+                    gas_token_id=tx.gas_token_id,
+                    transfer_token_id=tx.transfer_token_id,
+                    message_data=tx.data,
+                    create_contract=True,
+                    gas_remained=remote_gas_reserved,
+                )
+            )
         else:
             state.delta_token_balance(tx.sender, tx.transfer_token_id, -tx.value)
             if (
@@ -570,11 +599,8 @@ def mk_contract_address(sender, full_shard_key, nonce):
     )[12:]
 
 
-def create_contract(ext, msg):
+def create_contract(ext, msg, contract_receipient=b""):
     log_msg.debug("CONTRACT CREATION")
-
-    if msg.is_cross_shard:
-        return 0, msg.gas, b""
 
     if msg.transfer_token_id != ext.default_state_token:
         # TODODLL calling smart contract with non QKC transfer_token_id is not supported
@@ -585,9 +611,10 @@ def create_contract(ext, msg):
     if ext.tx_origin != msg.sender:
         ext.increment_nonce(msg.sender)
 
-    if msg.sender == null_address:
-        msg.to = mk_contract_address(msg.sender, msg.to_full_shard_key, 0)
-        # msg.to = sha3(msg.sender + code)[12:]
+    if contract_receipient != b"":
+        msg.to = contract_receipient
+    elif msg.sender == null_address:
+        msg.to = sha3(msg.sender + code)[12:]
     else:
         nonce = utils.encode_int(ext.get_nonce(msg.sender) - 1)
         msg.to = mk_contract_address(msg.sender, msg.to_full_shard_key, nonce)
